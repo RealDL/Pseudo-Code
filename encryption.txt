@@ -1,0 +1,145 @@
+import rsa
+import pickle
+from logger import *
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad, unpad
+from Crypto.Random import get_random_bytes
+
+logger.info('RealDL Encryption Module : RSA')
+
+class RSA_Keys
+    private bits
+    private public_key
+    private private_key
+
+    public procedure new(new_bits)
+        bits = new_bits
+        try
+            with open("Keys/public.pem", "rb") as f
+                public_key = rsa.PublicKey.load_pkcs1(f.read())
+                private_key = rsa.PrivateKey.load_pkcs1(f.read())
+            endwith
+        except
+            public_key, private_key = rsa.newkeys(bits)
+            with open("Keys/public.pem", "wb") as f
+                f.write(public_key.save_pkcs1("PEM"))
+            endwith
+            with open("Keys/private.pem", "wb") as f
+                f.write(private_key.save_pkcs1("PEM"))
+            endwith
+        endtry
+    endprocedure
+
+    public procedure export_keys()
+        return public_key, private_key
+    endprocedure
+endclass
+
+class RSA_Encryption
+    private public_key
+
+    public procedure new(new_public_key)
+        try
+            public_key = new_public_key
+        except ValueError as e
+            logging.error("Error: " + e)
+        endtry
+    endprocedure
+
+    public procedure encrypt(message)
+        try
+            return rsa.encrypt(serialise(message), public_key)
+        except ValueError as e
+            logging.error("Error: " + e)
+        endtry
+    endprocedure
+
+    public procedure decrypt(encrypted_message, private_key)
+        try
+            encoded_message = rsa.decrypt(encrypted_message, private_key)
+            return unserialise(encoded_message)
+        except ValueError as e
+            logging.error("Error: " + e)
+        endtry
+    endprocedure
+
+    public procedure serialise(data)
+        try
+            return pickle.dumps(data) 
+        except ValueError as e
+            logging.error("Error: " + e)
+        endtry
+    endprocedure
+
+    public procedure unserialise(data)
+        try
+            return pickle.loads(data)
+        except ValueError as e
+            logging.error("Error: " + e)
+        endtry
+    endprocedure
+endclass
+
+class AES_Keys
+    private bytes
+    private key
+
+    public procedure new(bits)
+        bytes = bits // 8
+        key = get_random_bytes(bytes)
+    endprocedure
+
+    public procedure export_key()
+        return key
+    endprocedure
+endclass
+
+class AES_Encryption
+    private key
+    private cipher
+
+    public procedure new(key)
+        try
+            key = key
+            cipher = AES.new(key, AES.MODE_ECB)
+        except ValueError as e
+            logging.error("Error: " + e)
+        endtry
+    endprocedure
+
+    public procedure encrypt(message)
+        try
+            message_bytes = serialise(message)
+            padded_message = pad(message_bytes, AES.block_size)
+            return cipher.encrypt(padded_message)
+        except ValueError as e
+            logging.error("Error: " + e)
+        endtry
+    endprocedure
+    
+    public procedure decrypt(encrypted_message)
+        try
+            decrypted_padded_message = cipher.decrypt(encrypted_message)
+            decrypted_unpadded_bytes_message = unpad(decrypted_padded_message, AES.block_size)
+            return unserialise(decrypted_unpadded_bytes_message)
+        except ValueError as e
+            logging.error("Error: " + e)
+        endtry
+    endprocedure
+
+    public procedure serialise(data)
+        try
+            return pickle.dumps(data) 
+        except ValueError as e
+            logging.error("Error: " + e)
+        endtry
+    endprocedure
+
+    public procedure unserialise(data)
+        try
+            return pickle.loads(data)
+        except ValueError as e
+            logging.error("Error: " + e)
+        endtry
+    endprocedure
+endclass

@@ -1,0 +1,52 @@
+import socket
+from settings import Config
+from logger import *
+
+logger.debug("RealDL Network Code.")
+
+class Network inherits Config
+    private client
+    private server
+    private port
+    private addr
+
+    public procedure new()
+        super.new()
+        client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server = SERVER
+        port = PORT
+        addr = (server, port)
+    endprocedure
+        
+    public procedure connect()
+        try
+            client.connect(addr)
+        except socket.error as Error
+            logger.error(f"Socket failed trying to connect: {Error}")
+        endtry
+    endprocedure
+
+    public function receive(data_size)
+        try
+            return self.client.recv(data_size)
+        except socket.error as Error
+            logger.error(f"Socket failed trying to receive: {Error}")
+        endtry
+    endfunction
+
+    public procedure send(data)
+        try
+            client.send(data)
+        except socket.error as Error
+            logger.error(f"Socket failed trying to send: {Error}")
+        endtry
+    endprocedure
+
+    public procedure sendall(data)
+        try
+            client.sendall(data)
+        except socket.error as Error
+            logger.error(f"Socket failed trying to sendall: {Error}")
+        endtry
+    endprocedure
+endclass

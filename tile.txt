@@ -1,0 +1,22 @@
+import pygame
+from settings import *
+from logger import *
+
+logger.debug("RealDL Tile Code.")
+
+class Tile inherits pygame.sprite.Sprite
+    private image
+    private rect
+    private id
+
+    public procedure new(pos,groups,new_image,new_id)
+	try
+	    super.new(groups)
+   	    image = pygame.image.load(new_image).convert_alpha()
+	    rect = image.get_rect(topleft = pos)
+   	    id = new_id
+	except FileExistsError as FileError
+	    logger.error(f"Failed to create Tile Class: {FileError}")
+	endtry
+    endprocedure
+endclass

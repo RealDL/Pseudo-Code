@@ -1,0 +1,82 @@
+import pygame 
+from settings import *
+from tile import Tile
+from logger import *
+
+logger.info("RealDL Level Code.")
+
+class Level inherits Config
+    private display_surface
+    private visible_sprites
+    private obstacle_sprites
+
+    public procedure new()
+	super.new()
+	// get the display surface 
+	display_surface = pygame.display.get_surface()
+
+	// sprite group setup
+	visible_sprites = new YSortCameraGroup()
+	obstacle_sprites = pygame.sprite.Group()
+    
+	// sprite setup
+	create_map()
+    endprocedure
+
+    public procedure create_map()
+	for row_index, row in enumerate(WORLD_MAP)
+	    for col_index, col in enumerate(row)
+		x = col_index * TILESIZE
+		y = row_index * TILESIZE
+		    if col == 'x' then
+			new Tile((x,y),[visible_sprites,obstacle_sprites],'./Graphics/rock.png',TILE_ID)
+		    endif
+	    next col_index, col
+	next row_index, row
+    endprocedure
+
+    public procedure run(player)
+	// update and draw the game
+	visible_sprites.custom_draw(player)
+	visible_sprites.update()
+    endprocedure
+endclass
+
+class YSortCameraGroup inhreits pygame.sprite.Group
+    private display_surface
+    private half_width
+    private half_height
+    private offset
+    private floor_surf
+    private floor_rect
+
+    public procedure new()
+	super.new()
+	// general setup 
+	display_surface = pygame.display.get_surface()
+	half_width = display_surface.get_size()[0] // 2
+	half_height = display_surface.get_size()[1] // 2
+	offset = pygame.math.Vector2()
+
+        // Floor
+	floor_surf = pygame.image.load('./Graphics/ground.png').convert()
+	floor_rect = floor_surf.get_rect(topleft = (-600,-600)) // in order to not see the white
+    endprocedure
+
+    public procedure custom_draw(player)
+	// getting the offset 
+	offset.x = player.rect.centerx - half_width 
+	offset.y = player.rect.centery - half_height 
+
+	// drawing the floor
+	floor_offset_pos = floor_rect.topleft - offset
+	display_surface.blit(floor_surf,floor_offset_pos)
+
+	// for sprite in sprites()
+	for sprite in sorted(sprites(),key = lambda sprite: sprite.rect.centery)
+	    offset_pos = sprite.rect.topleft - offset
+	    display_surface.blit(sprite.image,offset_pos)
+	next sprite
+    endprocedure
+endclass
+

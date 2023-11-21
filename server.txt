@@ -1,0 +1,136 @@
+import _thread
+from random import randint, choice
+import string
+import math
+import socket
+from settings import Config
+from encryption import RSA_Keys, RSA_Encryption
+from logger import logger
+
+logger.debug("RealDL Server Code.")
+
+class Server inherits Config
+    private server
+    private port
+    private players
+    private connections
+    private s
+    private rsa_keys
+    private public_key
+    private private_key
+    private rsa_encrypt
+
+    public procedure new()
+	super.new()
+        server = SERVER
+        port = PORT
+        players = {}
+        connections = 0
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        rsa_keys = RSA_Keys(ENCRYPTION_DATA_SIZE)
+        public_key, private_key = rsa_keys.export_keys()
+        rsa_encrypt = RSA_Encryption(public_key)
+
+        try
+            s.bind((server, port))
+        except socket.error as e
+            logger.error(str(e))
+	endtry
+        s.listen()
+        logger.info("Waiting for connections, Server Started")
+    endprocedure
+
+    function create_random_string()
+        characters = string.ascii_letters + string.digits
+        return ''.join(choice(characters) for _ in range(ID_STRING_LENGTH))
+    endfunction
+
+    function is_touching(x, y, other_x, other_y, threshold)
+        distance = math.sqrt((x + SQUARE_SIZE / 2 - other_x) ** 2 + (y + SQUARE_SIZE / 2 - other_y) ** 2)
+        sum_half_widths = sum_half_heights = (SQUARE_SIZE + threshold) / 2
+        return distance <= math.sqrt(sum_half_widths ** 2 + sum_half_heights ** 2)
+    endfunction
+
+    function get_player_position()
+        x, y = random.randint(256, 763), random.randint(256, 634)
+        while any(is_touching(x, y, p['x'], p['y'], SQUARE_SIZE) for p in players.values())
+            x, y = random.randint(256, 763), random.randint(256, 634)
+        return x, y
+    endfunction
+
+    function create_new_player()
+        key_string = create_random_string()
+        player_x, player_y = get_player_position()
+        return {
+            "x": player_x,
+            "y": player_y,
+            "image": "./Graphics/player.png",
+            "id": key_string
+        }, key_string
+    endfunction
+
+    public procedure handle_client_communication(conn, key_string, aes_encryption)
+        running = True
+        while running
+            try
+                data = aes_encryption.decrypt(unserialize(conn.recv(DATA_SIZE)))
+                players[key_string] = data
+
+                if not data then
+                    logger.info("Player " + key_string + " disconnected.")
+                    running = False
+                else
+                    reply = players
+                    encrypted_reply = serialize(aes_encryption.encrypt(reply))
+
+                conn.sendall(encrypted_reply)
+            except
+                logger.info("Player " + key_string + " lost connection.")
+                running = False
+	    endtry
+
+        logger.info("Connection Closed for Player " + key_string + ".")
+        del players[key_string]
+        connections -= 1
+        conn.close()
+    endprocedure
+
+    public procedure threaded_client(conn)
+        try
+            new_player, key_string = create_new_player()
+            players[key_string] = new_player
+
+            key_to_send = serialize(public_key)
+            data_to_send = serialize({'public_key': key_to_send})
+            conn.send(data_to_send)
+            logger.info("Sending Public Key: " + public_key)
+
+            aes_key_dict = rsa_encrypt.decrypt(unserialize(conn.recv(ENCRYPTION_DATA_SIZE)), private_key)
+            aes_key = aes_key_dict['aes_key']
+            logger.info("Received AES Key: " + aes_key)
+
+            aes_encryption = AES_Encryption(aes_key)
+            player_dict_send = {'player': new_player}
+            encrypted_player = aes_encryption.encrypt(serialize(player_dict_send))
+            conn.send(encrypted_player)
+            logger.info("Sending Player dict to client: " + new_player)
+
+            handle_client_communication(conn, key_string, aes_encryption)
+        except
+            logger.error("An Error Occurred trying to setup Client-Server connection.")
+	endtry
+    endprocedure
+
+    public procedure run()
+        while True
+            conn, addr = s.accept()
+            connections += 1
+            logger.info("Connected to: " + addr)
+            logger.info("There are a total of " + connections + " connections!")
+
+            _thread.start_new_thread(threaded_client, (conn,))
+        endprocedure
+endclass
+
+server = new Server()
+server.run()

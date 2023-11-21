@@ -1,0 +1,150 @@
+import pygame
+import sys
+from network import Network
+from settings import Config
+from level import Level
+from player import Player
+from logger import *
+from encryption import *
+from debug import debug
+
+class Client inherits Config
+    private win
+    private clock
+    private level
+    private run
+    private players
+    private player_x
+    private player_y
+    private player_image
+    private id
+    private player
+    private network
+    private public_key
+    private rsa_encrypt
+    private aes_key
+    private encryption
+
+    public procedure new()
+        super.new()
+
+        // Initalize Pygame
+        pygame.init()
+        win = pygame.display.set_mode((WIDTH, HEIGHT))
+        pygame.display.set_caption("Client")
+        clock = pygame.time.Clock()
+        level = new Level()
+        run = True
+
+        // Setup Network
+        network = new Network()
+        network.connect()
+
+        // Get Public Key
+        public_key_dict = unserialize(network.receive(ENCRYPTION_DATA_SIZE))
+        public_key = unserialize(public_key_dict['public_key'])
+        rsa_encrypt = new RSA_Encryption(public_key)
+        logger.info("Received Public Key: " + public_key)
+
+        // Setup and send AES Encryption
+        aes_key = new AES_Keys(BITS)
+        key = aes_key.export_key()
+        key_dict = {'aes_key': key}
+        encrypted_key_dict = serialize(rsa_encrypt.encrypt(key_dict))
+        network.send(encrypted_key_dict)
+        logger.info("Sending AES KEY: " + key)
+
+        // Receive Player
+        encryption = new AES_Encryption(key)
+        data = unserialize(encryption.decrypt(network.receive(ENCRYPTION_DATA_SIZE)))
+        player_info = data['player']
+        initialize_player(player_info)
+        logger.info("Received player dict: " + player_info)
+    endprocedure
+
+    public procedure initialize_player(player_info)
+        players = []
+        player_x = player_info['x']
+        player_y = player_info['y']
+        player_image = player_info['image']
+        id = player_info['id']
+        player = new Player([player_x, player_y], player_image, level.visible_sprites, level.obstacle_sprites, id)
+    endprocedure
+
+    public procedure update_players(player_dict)
+        players_to_remove = []
+
+        for player in players
+            if player.id in player_dict then
+                player_data = player_dict[player.id]
+                player.rect.x = player_data['x']
+                player.rect.y = player_data['y']
+            else
+                logger.debug("Removing player instance with id: " + player.id)
+                players_to_remove.append(player)
+            endif
+        next player
+
+        for player in players_to_remove
+            players.remove(player)
+            level.visible_sprites.remove(player)
+        next player
+
+        for player_data in player_dict.values()
+            player_ids = [player.id for player in players]
+            if player_data['id'] not in player_ids
+                logger.debug("Creating new player instance with id: " + player_data['id'])
+                new_player = new Player(
+                    [player_data['x'], player_data['y']],
+                    player_data['image'],
+                    level.visible_sprites,
+                    level.obstacle_sprites,
+                    player_data['id']
+                )
+                players.append(new_player)
+            endif
+        next player_data
+    endprocedure
+
+    public procedure redraw_window(all_players_dict)
+        update_players(all_players_dict)
+        win.fill(BG_COLOR)
+        level.run(player)
+        debug([player.rect.x, player.rect.y])
+        pygame.display.update()
+        clock.tick(FPS)
+    endprocedure
+
+    public procedure close()
+        pygame.quit()
+        sys.exit()
+    endprocedure
+
+    public procedure main()
+        while run
+            player_dict = {'x': player.rect.x, 'y': player.rect.y, 'image': player_image, 'id': id}
+            player_encrypted_dict = serialize(encryption.encrypt(player_dict))
+            network.send(player_encrypted_dict)
+            all_players_dict = encryption.decrypt(unserialize(network.receive(DATA_SIZE)))
+            
+            logger.debug("ALL DICT", all_players_dict)
+            logger.debug("Sending player data:", player_dict)
+            logger.debug("Received players dictionary:", all_players_dict)
+
+            for event in pygame.event.get()
+                if event.type == pygame.QUIT then
+                    close()
+                endif
+                if event.type == pygame.KEYDOWN then
+                    if event.key == pygame.K_ESCAPE then
+                        close()
+                    endif
+                endif
+            next event
+
+            redraw_window(all_players_dict)
+        endwhile
+    endprocedure
+
+client = new Client()
+client.main()
